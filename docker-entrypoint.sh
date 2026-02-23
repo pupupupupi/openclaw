@@ -103,6 +103,7 @@ if [ -n "$CHROMIUM_BIN" ] && { [ ! -f "$BROWSER_LOCAL_STATE" ] || [ ! -f "$BROWS
     --no-default-browser-check \
     --disable-sync \
     --disable-background-networking \
+    --password-store=basic \
     --user-data-dir="$BROWSER_PROFILE_DIR" \
     about:blank &
   WARMUP_PID=$!

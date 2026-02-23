@@ -41,18 +41,6 @@ services:
       retries: 5
       start_period: 20s
 
-  openclaw-sandbox-browser:
-    build:
-      context: .
-      dockerfile: Dockerfile.sandbox-browser
-    image: openclaw-sandbox-browser:bookworm-slim
-    ports:
-      - "${OPENCLAW_SANDBOX_CDP_PORT:-9223}:9222"
-      - "${OPENCLAW_SANDBOX_VNC_PORT:-5901}:5900"
-      - "${OPENCLAW_SANDBOX_NOVNC_PORT:-6081}:6080"
-    init: true
-    restart: unless-stopped
-
   openclaw-cli:
     image: ${OPENCLAW_IMAGE:-openclaw:local}
     network_mode: "service:openclaw-gateway"

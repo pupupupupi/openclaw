@@ -10,15 +10,23 @@ RUN apt-get update \
     curl \
     fonts-liberation \
     fonts-noto-color-emoji \
+    fonts-noto-cjk \
+    fonts-wqy-zenhei \
     git \
     jq \
+    locales \
     novnc \
     python3 \
     socat \
     websockify \
     x11vnc \
     xvfb \
+  && sed -i '/zh_CN.UTF-8/s/^# //' /etc/locale.gen \
+  && locale-gen \
   && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=zh_CN.UTF-8
+ENV LC_ALL=zh_CN.UTF-8
 
 COPY scripts/sandbox-browser-entrypoint.sh /usr/local/bin/openclaw-sandbox-browser
 RUN chmod +x /usr/local/bin/openclaw-sandbox-browser

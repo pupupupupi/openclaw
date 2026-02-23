@@ -28,7 +28,13 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends ${PACKAGES} \
   && rm -rf /var/lib/apt/lists/*
 
-RUN if [ "${INSTALL_PNPM}" = "1" ]; then npm install -g pnpm; fi
+# Configure pip mirror (China, Tsinghua)
+RUN mkdir -p /etc/pip && printf '[global]\nindex-url = https://pypi.tuna.tsinghua.edu.cn/simple\ntrusted-host = pypi.tuna.tsinghua.edu.cn\n' > /etc/pip/pip.conf
+
+# Configure npm/pnpm registry mirror (China, Alibaba)
+RUN npm config set registry https://registry.npmmirror.com --global
+
+RUN if [ "${INSTALL_PNPM}" = "1" ]; then npm install -g pnpm --registry=https://registry.npmmirror.com; fi
 
 RUN if [ "${INSTALL_BUN}" = "1" ]; then \
   curl -fsSL https://bun.sh/install | bash; \

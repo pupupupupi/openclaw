@@ -23,6 +23,9 @@ RUN apt-get update && \
 ENV LANG=zh_CN.UTF-8
 ENV LC_ALL=zh_CN.UTF-8
 
+# Configure pip mirror (China, Tsinghua)
+RUN mkdir -p /etc/pip && printf '[global]\nindex-url = https://pypi.tuna.tsinghua.edu.cn/simple\ntrusted-host = pypi.tuna.tsinghua.edu.cn\n' > /etc/pip/pip.conf
+
 RUN corepack enable
 
 WORKDIR /app

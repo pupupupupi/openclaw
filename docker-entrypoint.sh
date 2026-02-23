@@ -12,9 +12,13 @@ export PATH="$HOME/.local/bin:$PATH"
 # Install Python packages for skills (akshare etc.)
 if ! python3 -c "import akshare" 2>/dev/null; then
   echo "[entrypoint] Installing pip + akshare..."
+  PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
+  PIP_TRUSTED_HOST="pypi.tuna.tsinghua.edu.cn"
   curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
     && python3 /tmp/get-pip.py --user --break-system-packages --quiet 2>&1 \
-    && "$HOME/.local/bin/pip" install --user --break-system-packages --quiet akshare pandas pyarrow 2>&1 \
+    && "$HOME/.local/bin/pip" install --user --break-system-packages --quiet \
+         -i "$PIP_INDEX_URL" --trusted-host "$PIP_TRUSTED_HOST" \
+         akshare pandas pyarrow 2>&1 \
     && echo "[entrypoint] akshare installed successfully" \
     || echo "[entrypoint] Warning: failed to install akshare"
   rm -f /tmp/get-pip.py

@@ -122,7 +122,9 @@ export async function browserStart(baseUrl?: string, opts?: { profile?: string }
   const q = buildProfileQuery(opts?.profile);
   await fetchBrowserJson(withBaseUrl(baseUrl, `/start${q}`), {
     method: "POST",
-    timeoutMs: 15000,
+    // launchOpenClawChrome waits up to 15s for CDP + optional 10s bootstrap;
+    // Docker/headless environments are slower, so allow generous headroom.
+    timeoutMs: 90000,
   });
 }
 

@@ -179,6 +179,17 @@ export async function launchOpenClawChrome(
   const userDataDir = resolveOpenClawUserDataDir(profile.name);
   fs.mkdirSync(userDataDir, { recursive: true });
 
+  // Remove stale Chromium singleton lock files that persist across container restarts
+  // or unclean shutdowns. These block new Chromium instances with "profile in use" errors.
+  for (const lockFile of ["SingletonLock", "SingletonSocket", "SingletonCookie"]) {
+    const lockPath = path.join(userDataDir, lockFile);
+    try {
+      fs.unlinkSync(lockPath);
+    } catch {
+      // ignore (file may not exist)
+    }
+  }
+
   const needsDecorate = !isProfileDecorated(
     userDataDir,
     profile.name,
@@ -285,9 +296,24 @@ export async function launchOpenClawChrome(
   }
 
   const proc = spawnOnce();
+  // Capture stderr for diagnostics if Chrome fails to start.
+  let stderrChunks: string[] = [];
+  proc.stderr.on("data", (chunk: Buffer) => {
+    const text = chunk.toString("utf8");
+    stderrChunks.push(text);
+    // Keep only last ~4KB to avoid unbounded memory growth.
+    if (stderrChunks.length > 40) {
+      stderrChunks = stderrChunks.slice(-20);
+    }
+  });
+
   // Wait for CDP to come up.
   const readyDeadline = Date.now() + 15_000;
   while (Date.now() < readyDeadline) {
+    // If the process already exited, stop waiting immediately.
+    if (proc.exitCode != null || proc.killed) {
+      break;
+    }
     if (await isChromeReachable(profile.cdpUrl, 500)) {
       break;
     }
@@ -295,13 +321,17 @@ export async function launchOpenClawChrome(
   }
 
   if (!(await isChromeReachable(profile.cdpUrl, 500))) {
+    const exitCode = proc.exitCode;
     try {
       proc.kill("SIGKILL");
     } catch {
       // ignore
     }
+    const stderrTail = stderrChunks.join("").trim().slice(-2000);
+    const exitInfo = exitCode != null ? ` (exit code ${exitCode})` : "";
+    const stderrInfo = stderrTail ? `\nChromium stderr:\n${stderrTail}` : "";
     throw new Error(
-      `Failed to start Chrome CDP on port ${profile.cdpPort} for profile "${profile.name}".`,
+      `Failed to start Chrome CDP on port ${profile.cdpPort} for profile "${profile.name}"${exitInfo}.${stderrInfo}`,
     );
   }
 

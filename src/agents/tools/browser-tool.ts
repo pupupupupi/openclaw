@@ -1,4 +1,7 @@
 import crypto from "node:crypto";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import {
   browserAct,
@@ -525,10 +528,12 @@ export function createBrowserTool(opts?: {
               });
           if (snapshot.format === "ai") {
             const extractedText = snapshot.snapshot ?? "";
-            const wrappedSnapshot = wrapExternalContent(extractedText, {
-              source: "browser",
-              includeWarning: true,
-            });
+            const snapshotId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+            const snapshotDir = path.join(os.tmpdir(), `snapshot_${snapshotId}`);
+            await fs.mkdir(snapshotDir, { recursive: true });
+            const snapshotFile = path.join(snapshotDir, "snapshot_raw.txt");
+            await fs.writeFile(snapshotFile, extractedText, "utf-8");
+
             const safeDetails = {
               ok: true,
               format: snapshot.format,
@@ -542,6 +547,8 @@ export function createBrowserTool(opts?: {
               labelsSkipped: snapshot.labelsSkipped,
               imagePath: snapshot.imagePath,
               imageType: snapshot.imageType,
+              snapshotFile,
+              snapshotChars: extractedText.length,
               externalContent: {
                 untrusted: true,
                 source: "browser",
@@ -551,15 +558,33 @@ export function createBrowserTool(opts?: {
               },
             };
             if (labels && snapshot.imagePath) {
+              const summaryText = [
+                `Snapshot saved to: ${snapshotFile}`,
+                `Page: ${snapshot.url ?? ""}`,
+                `Characters: ${extractedText.length}`,
+                snapshot.truncated ? "WARNING: snapshot was truncated" : "",
+                `Use clean_snapshot.py to process: python3 scripts/clean_snapshot.py ${snapshotFile} --page-url "${snapshot.url ?? ""}"`,
+              ]
+                .filter(Boolean)
+                .join("\n");
               return await imageResultFromFile({
                 label: "browser:snapshot",
                 path: snapshot.imagePath,
-                extraText: wrappedSnapshot,
+                extraText: summaryText,
                 details: safeDetails,
               });
             }
+            const summaryText = [
+              `Snapshot saved to: ${snapshotFile}`,
+              `Page: ${snapshot.url ?? ""}`,
+              `Characters: ${extractedText.length}`,
+              snapshot.truncated ? "WARNING: snapshot was truncated" : "",
+              `Use clean_snapshot.py to process: python3 scripts/clean_snapshot.py ${snapshotFile} --page-url "${snapshot.url ?? ""}"`,
+            ]
+              .filter(Boolean)
+              .join("\n");
             return {
-              content: [{ type: "text" as const, text: wrappedSnapshot }],
+              content: [{ type: "text" as const, text: summaryText }],
               details: safeDetails,
             };
           }

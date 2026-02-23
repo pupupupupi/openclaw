@@ -4,19 +4,19 @@
 
 | 功能 | URL | 说明 |
 |------|-----|------|
-| 首页 | `https://robo.datayes.com` | 市场概览、热门资讯 |
-| 登录 | `https://robo.datayes.com/login` | 手机号+密码登录 |
-| 个股详情 | `https://robo.datayes.com/v2/stock/{code}` | 个股全景分析 |
-| 研报中心 | `https://robo.datayes.com/v2/report` | 券商研报列表 |
-| 智能选股 | `https://robo.datayes.com/v2/selection` | 多条件筛选 |
-| 宏观数据 | `https://robo.datayes.com/v2/macro` | GDP/CPI/PMI 等 |
-| 行业分析 | `https://robo.datayes.com/v2/industry` | 行业对比、排名 |
-| 资金流向 | `https://robo.datayes.com/v2/moneyflow` | 主力资金动向 |
-| 市场概览 | `https://robo.datayes.com/v2/market` | 大盘走势、板块热度 |
+| 首页 | `https://r.datayes.com` | 市场概览、热门资讯 |
+| 登录 | `https://r.datayes.com/auth/login` | 手机号+密码登录 |
+| 个股详情 | `https://r.datayes.com/v2/stock/{code}` | 个股全景分析 |
+| 研报中心 | `https://r.datayes.com/v2/report` | 券商研报列表 |
+| 智能选股 | `https://r.datayes.com/v2/selection` | 多条件筛选 |
+| 宏观数据 | `https://r.datayes.com/v2/macro` | GDP/CPI/PMI 等 |
+| 行业分析 | `https://r.datayes.com/v2/industry` | 行业对比、排名 |
+| 资金流向 | `https://r.datayes.com/v2/moneyflow` | 主力资金动向 |
+| 市场概览 | `https://r.datayes.com/v2/market` | 大盘走势、板块热度 |
 
 ## 个股详情页子模块
 
-个股页 `https://robo.datayes.com/v2/stock/{code}` 通常包含以下 tab/区域：
+个股页 `https://r.datayes.com/v2/stock/{code}` 通常包含以下 tab/区域：
 
 - 概览 — 实时行情、核心指标
 - 财务 — 三大报表、财务指标趋势

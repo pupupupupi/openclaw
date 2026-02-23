@@ -18,7 +18,7 @@ browser(action="status", profile="openclaw")
 browser(action="start", profile="openclaw")
 
 # 2. 导航到登录页
-browser(action="navigate", targetUrl="https://robo.datayes.com/login", profile="openclaw")
+browser(action="navigate", targetUrl="https://r.datayes.com/auth/login", profile="openclaw")
 
 # 3. 等待页面完全加载
 browser(action="act", profile="openclaw", request={kind: "wait", loadState: "networkidle"})
@@ -57,7 +57,7 @@ browser(action="screenshot", profile="openclaw")
 
 ```
 # 1. 导航到目标页面
-browser(action="navigate", targetUrl="https://robo.datayes.com/v2/stock/600519", profile="openclaw")
+browser(action="navigate", targetUrl="https://r.datayes.com/v2/stock/600519", profile="openclaw")
 
 # 2. 等待数据渲染
 browser(action="act", profile="openclaw", request={kind: "wait", loadState: "networkidle"})

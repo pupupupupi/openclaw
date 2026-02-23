@@ -54,6 +54,20 @@ RUN set -eux; \
     done
 ENV PATH="/root/.bun/bin:${PATH}"
 
+# Install Chinese fonts and locale support for browser automation
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      fonts-noto-cjk \
+      fonts-wqy-zenhei \
+      locales \
+    && sed -i '/zh_CN.UTF-8/s/^# //' /etc/locale.gen \
+    && locale-gen \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=zh_CN.UTF-8
+ENV LC_ALL=zh_CN.UTF-8
+
 RUN corepack enable
 
 WORKDIR /app

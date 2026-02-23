@@ -17,22 +17,31 @@ browser(action="status", profile="openclaw")
 # 如果 running=false:
 browser(action="start", profile="openclaw")
 
-# 2. 导航到登录页
+# 2. 先检查登录状态（导航到首页）
+browser(action="navigate", targetUrl="https://r.datayes.com", profile="openclaw")
+browser(action="act", profile="openclaw", request={kind: "wait", loadState: "domcontentloaded"})
+browser(action="act", profile="openclaw", request={kind: "wait", timeMs: 3000})
+browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
+# → snapshot 返回文件路径（不返回原文），如: /tmp/snapshot_<uuid>/snapshot_raw.txt
+# → 用返回的路径执行数据清洗: python3 scripts/clean_snapshot.py <路径> --page-url "..."
+# → 检查清洗后 summary.json 的 login_status
+# → 如果能看到导航栏+资讯列表等完整内容 → 已登录，跳过登录
+# → 如果看到登录表单（tab "密码登录"、button "登 录"）→ 未登录
+
+# 3. 导航到登录页（仅未登录时）
 browser(action="navigate", targetUrl="https://r.datayes.com/auth/login", profile="openclaw")
 
-# 3. 等待页面完全加载
-browser(action="act", profile="openclaw", request={kind: "wait", loadState: "networkidle"})
-
-# 4. 截图确认当前页面状态
-browser(action="screenshot", profile="openclaw")
+# 4. 等待页面加载（禁止 networkidle，萝卜投研持续有网络请求会超时）
+browser(action="act", profile="openclaw", request={kind: "wait", loadState: "domcontentloaded"})
+browser(action="act", profile="openclaw", request={kind: "wait", timeMs: 2000})
 
 # 5. 获取 AI 快照定位表单元素
 browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
-# → 从返回结果中找到：
-#   - 登录方式切换 tab（如"密码登录"）
-#   - 手机号输入框 ref
+# → snapshot 返回文件路径，用清洗脚本处理后从 elements.json 中找到：
+#   - tab "密码登录" ref
+#   - textbox "手机号码/邮箱/账号" ref
 #   - 密码输入框 ref
-#   - 登录按钮 ref
+#   - button "登 录" ref
 
 # 6. 如需切换到密码登录模式
 browser(action="act", profile="openclaw", request={kind: "click", ref: "<tab_ref>"})
@@ -47,28 +56,42 @@ browser(action="act", profile="openclaw", request={kind: "type", ref: "<password
 browser(action="act", profile="openclaw", request={kind: "click", ref: "<login_btn_ref>"})
 
 # 10. 等待跳转
-browser(action="act", profile="openclaw", request={kind: "wait", loadState: "networkidle", timeoutMs: 15000})
+browser(action="act", profile="openclaw", request={kind: "wait", loadState: "domcontentloaded"})
+browser(action="act", profile="openclaw", request={kind: "wait", timeMs: 3000})
 
 # 11. 验证登录结果
-browser(action="screenshot", profile="openclaw")
+browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
+# → 用返回的文件路径执行数据清洗，检查 login_status == "logged_in"
+# → 能看到导航栏+资讯列表 → 登录成功
+# → 仍有 tab "密码登录" → 登录失败，检查是否有验证码
+# → 出现验证码 → 截图告知用户手动处理
 ```
 
 ## 数据提取工作流
 
 ```
-# 1. 导航到目标页面
-browser(action="navigate", targetUrl="https://r.datayes.com/v2/stock/600519", profile="openclaw")
+# 1. 获取股票代码（如不知道，用 akshare skill 查询）
+# python3 -c "import akshare as ak; df = ak.stock_info_a_code_name(); print(df[df['name'].str.contains('中国中铁')])"
 
-# 2. 等待数据渲染
-browser(action="act", profile="openclaw", request={kind: "wait", loadState: "networkidle"})
+# 2. 导航到个股详情页
+browser(action="navigate", targetUrl="https://r.datayes.com/stock/601390", profile="openclaw")
 
-# 3. 获取快照提取数据
+# 3. 等待数据渲染（个股页图表数据加载较慢，需要更长等待）
+browser(action="act", profile="openclaw", request={kind: "wait", loadState: "domcontentloaded"})
+browser(action="act", profile="openclaw", request={kind: "wait", timeMs: 5000})
+
+# 4. 获取快照提取数据（使用默认模式，不用 efficient）
 browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
-# → 从 snapshot 文本中解析出股票数据
+# → snapshot 返回文件路径，用清洗脚本处理
 
-# 4. 如需查看更多 tab（如"财务"）
+# 5. 如果 snapshot 只拿到左侧菜单，点击具体子模块查看数据
+browser(action="act", profile="openclaw", request={kind: "click", ref: "<关键数据概览link的ref>"})
+browser(action="act", profile="openclaw", request={kind: "wait", timeMs: 5000})
+browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
+
+# 6. 如需查看更多 tab（如"财务"）
 browser(action="act", profile="openclaw", request={kind: "click", ref: "<财务tab_ref>"})
-browser(action="act", profile="openclaw", request={kind: "wait", loadState: "networkidle"})
+browser(action="act", profile="openclaw", request={kind: "wait", timeMs: 3000})
 browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
 ```
 
@@ -91,18 +114,18 @@ browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
 
 | 场景 | 推荐参数 |
 |------|----------|
-| 常规页面分析 | `snapshotFormat="ai"` |
-| 大页面/性能优先 | `snapshotFormat="ai", mode="efficient"` |
+| 常规页面分析（默认） | `snapshotFormat="ai"` |
 | 需要精确 ref | `snapshotFormat="ai", refs="aria"` |
 | 仅看可交互元素 | `snapshotFormat="ai", interactive=true` |
 | 带标注截图 | `snapshotFormat="ai", labels=true` |
 | 指定区域 | `snapshotFormat="ai", selector="<CSS选择器>"` |
+| 页面过大被截断时 | `snapshotFormat="ai", mode="efficient"` (限制可通过 `OPENCLAW_SNAPSHOT_EFFICIENT_MAX_CHARS` 配置) |
 
 ## targetId 保持
 
-snapshot 返回的 `targetId` 标识当前标签页。后续 act 操作应传入同一个 `targetId` 以确保操作在同一标签页上执行：
+snapshot 返回的 details 中包含 `targetId`，标识当前标签页。后续 act 操作应传入同一个 `targetId` 以确保操作在同一标签页上执行：
 
 ```
-# snapshot 返回 targetId: "ABC123"
+# snapshot details 中 targetId: "ABC123"
 browser(action="act", profile="openclaw", request={kind: "click", ref: "e5", targetId: "ABC123"})
 ```

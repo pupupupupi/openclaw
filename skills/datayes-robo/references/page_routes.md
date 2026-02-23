@@ -6,17 +6,18 @@
 |------|-----|------|
 | 首页 | `https://r.datayes.com` | 市场概览、热门资讯 |
 | 登录 | `https://r.datayes.com/auth/login` | 手机号+密码登录 |
-| 个股详情 | `https://r.datayes.com/v2/stock/{code}` | 个股全景分析 |
-| 研报中心 | `https://r.datayes.com/v2/report` | 券商研报列表 |
-| 智能选股 | `https://r.datayes.com/v2/selection` | 多条件筛选 |
-| 宏观数据 | `https://r.datayes.com/v2/macro` | GDP/CPI/PMI 等 |
-| 行业分析 | `https://r.datayes.com/v2/industry` | 行业对比、排名 |
-| 资金流向 | `https://r.datayes.com/v2/moneyflow` | 主力资金动向 |
-| 市场概览 | `https://r.datayes.com/v2/market` | 大盘走势、板块热度 |
+| 个股详情 | `https://r.datayes.com/stock/{code}` | 个股全景分析 |
+| 研报中心 | `https://r.datayes.com/fastreport` | 券商研报列表 |
+| 资讯 | `https://r.datayes.com/intelligent_feed` | 资讯动态 |
+| 数据 | `https://r.datayes.com/data/economy_database` | 宏观经济数据库 |
+| 基金 | `https://r.datayes.com/mof/app/fund/product/filter/public` | 公募基金筛选 |
+| 组合 | `https://r.datayes.com/mof/portfolio/overview` | 投资组合概览 |
+| 市场概况 | `https://r.datayes.com/market/quotation` | 大盘走势、板块热度 |
+| 搜索 | `https://r.datayes.com/search?query={关键词}` | 站内搜索 |
 
 ## 个股详情页子模块
 
-个股页 `https://r.datayes.com/v2/stock/{code}` 通常包含以下 tab/区域：
+个股页 `https://r.datayes.com/stock/{code}` 通常包含以下 tab/区域（具体以 snapshot 为准）：
 
 - 概览 — 实时行情、核心指标
 - 财务 — 三大报表、财务指标趋势
@@ -41,9 +42,18 @@
 
 ## 搜索功能
 
-站内搜索通常位于页面顶部导航栏，支持：
+站内搜索有多种方式：
+
+1. 直接 URL 导航（最可靠）：`https://r.datayes.com/search?query=关键词`
+2. 点击首页 "AI搜索" 按钮进入搜索模式
+3. 在搜索框中输入后按 Enter
+
+搜索支持：
 - 股票代码搜索（如 `600519`）
 - 股票名称搜索（如 `茅台`）
 - 拼音首字母搜索（如 `gzmt`）
+- 关键词搜索（如 `新能源`）
 
-搜索后会出现下拉建议列表，点击即可跳转到对应个股页面。
+搜索后会出现下拉建议列表或搜索结果页，点击即可跳转到对应页面。
+
+注意：首页搜索框可能需要先点击 "AI搜索" 按钮激活，直接在 textbox 中 type 可能超时。

@@ -79,7 +79,7 @@ def _is_data_value(text: str) -> bool:
 
 def _find_chart_title(elements: list[dict], img_index: int) -> str:
     """向前搜索图表标题（在 img 元素之前的 generic/heading 中查找）"""
-    for i in range(img_index - 1, max(img_index - 15, -1), -1):
+    for i in range(img_index - 1, max(img_index - 30, -1), -1):
         elem: dict = elements[i]
         name: str = elem.get('name', '') or elem.get('extra_text', '')
         if not name:

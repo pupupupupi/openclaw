@@ -17,6 +17,13 @@ from typing import Optional
 from chart_extractor import dedup_svg_text, extract_chart_data
 from table_extractor import extract_tables
 from section_extractor import extract_sections_full, extract_navigation
+from page_detector import (
+    infer_page_url,
+    detect_page_type,
+    detect_login_status,
+    detect_truncated,
+    extract_stock_code,
+)
 
 
 LINE_PATTERN = re.compile(
@@ -160,115 +167,15 @@ def parse_snapshot(raw: str) -> list[dict]:
     return elements
 
 
-LOGGED_IN_INDICATORS = {'修改密码', '个人中心', '帮助中心', '任务专区'}
-LOGIN_PAGE_INDICATORS = {'密码登录', '短信验证码登录', '登 录', '登录Datayes'}
-LOGIN_PAGE_LINK_INDICATORS = {'暂无账号，点击申请试用', '忘记密码？'}
-NAV_ITEMS = {'首页', '研报', '资讯', '数据', '自选', '股票', '基金', '组合'}
+KNOWN_VALUE_PATTERN = re.compile(r'^-?[\d,.]+[亿万%]?$')
 
 
-def detect_login_status(elements: list[dict]) -> str:
-    try:
-        has_avatar = False
-        has_logged_in_menu = False
-        has_login_form = False
-        nav_count = 0
-        has_content = False
-
-        for elem in elements:
-            try:
-                role = elem.get('role', '')
-                name = elem.get('name', '')
-                extra = elem.get('extra_text', '')
-                text = name or extra
-                url = elem.get('url', '')
-
-                if role == 'img' and name == 'avatar':
-                    has_avatar = True
-                if role == 'link' and text in LOGGED_IN_INDICATORS:
-                    has_logged_in_menu = True
-                if role == 'tab' and text in LOGIN_PAGE_INDICATORS:
-                    has_login_form = True
-                if role == 'button' and text in LOGIN_PAGE_INDICATORS:
-                    has_login_form = True
-                if role == 'link' and text in LOGIN_PAGE_LINK_INDICATORS:
-                    has_login_form = True
-                if role == 'heading' and '登录' in text:
-                    has_login_form = True
-                if role == 'textbox' and ('手机号' in text or '邮箱' in text or '账号' in text):
-                    has_login_form = True
-                if role in ('generic', 'link') and text in NAV_ITEMS:
-                    nav_count += 1
-                if role == 'link' and url and ('/details/' in url or '/search' in url):
-                    has_content = True
-                if role == 'button' and 'AI搜索' in text:
-                    has_content = True
-                if role in ('textbox', 'combobox') and text and '手机号' not in text and '密码' not in text:
-                    has_content = True
-                if role == 'menuitem' and text:
-                    has_content = True
-            except Exception:
-                continue
-
-        if has_avatar or has_logged_in_menu:
-            return 'logged_in'
-        if has_login_form:
-            return 'not_logged_in'
-        if nav_count >= 2 and has_content:
-            return 'logged_in'
-        if nav_count >= 2:
-            return 'logged_in'
-        return 'unknown'
-    except Exception:
-        return 'unknown'
-
-
-def detect_truncated(raw: str) -> bool:
-    try:
-        return 'TRUNCATED' in raw or '(truncated)' in raw
-    except Exception:
-        return False
-
-
-def detect_page_type(page_url: str, elements: list[dict]) -> str:
-    """检测页面类型"""
-    try:
-        if not page_url:
-            return 'unknown'
-        if '/stock/' in page_url:
-            return 'stock_detail'
-        if '/auth/login' in page_url:
-            return 'login'
-        if '/search' in page_url:
-            return 'search'
-        if '/fastreport' in page_url:
-            return 'report_list'
-        if '/intelligent_feed' in page_url:
-            return 'news_feed'
-        if '/data/' in page_url:
-            return 'data'
-        if '/mof/' in page_url:
-            return 'fund'
-        if page_url.rstrip('/').endswith('r.datayes.com'):
-            return 'home'
-        return 'unknown'
-    except Exception:
-        return 'unknown'
-
-
-def extract_stock_code(page_url: str) -> str:
-    """从 URL 中提取股票代码"""
-    try:
-        m = re.search(r'/stock/(\d+)', page_url)
-        if m:
-            return m.group(1)
-        return ''
-    except Exception:
-        return ''
+def _is_valid_key_data_value(text: str) -> bool:
+    return bool(KNOWN_VALUE_PATTERN.match(text))
 
 
 def extract_stock_key_data(elements: list[dict]) -> dict:
     """从个股页提取关键行情数据（标签-值配对），体积远小于 content_nodes"""
-    # 常见行情标签
     KNOWN_LABELS = {
         '最新', '均价', '涨跌', '今开', '涨幅', '最高', '总手', '最低', '金额',
         '量比', '涨停', '跌停', '外盘(手)', '内盘(手)', '换手', '净资产',
@@ -286,7 +193,8 @@ def extract_stock_key_data(elements: list[dict]) -> dict:
                 if text in KNOWN_LABELS:
                     pending_label = text
                 elif pending_label:
-                    data[pending_label] = text
+                    if _is_valid_key_data_value(text):
+                        data[pending_label] = text
                     pending_label = ''
             except Exception:
                 continue
@@ -392,6 +300,74 @@ def extract_menu_structure(elements: list[dict]) -> list[dict]:
     return menus
 
 
+def extract_pe_pb_data(elements: list[dict]) -> dict:
+    """从 PE/PB Bands 页面的 listitem 和图表图例中提取估值数据"""
+    import re
+
+    result: dict = {}
+    bands: list[str] = []
+
+    # 需要提取的标签前缀
+    pe_pb_prefixes = (
+        '当前股价', '当前市值', '当前PE', '当前PB', '当前PS', '当前PCF',
+        'PE(TTM)历史中位数', 'PB历史中位数', 'PS历史中位数', 'PCF历史中位数',
+        'PE(TTM)当前百分位', 'PB当前百分位', 'PS当前百分位', 'PCF当前百分位',
+    )
+
+    for i, elem in enumerate(elements):
+        role = elem.get('role', '')
+        name = (elem.get('name', '') or '').strip()
+        extra = (elem.get('extra_text', '') or '').strip().strip('"')
+
+        # 从 listitem 提取完整的 "标签：值" 格式（如 "当前股价：6.31元"）
+        if role == 'listitem' and name:
+            for prefix in pe_pb_prefixes:
+                if name.startswith(prefix) and ('：' in name or ':' in name):
+                    val = name.split('：', 1)[-1].split(':', 1)[-1].strip()
+                    if val:
+                        result[prefix] = val
+                    break
+
+        # 从 generic 提取标签在 name 中、值在 extra_text 中的情况
+        # 如 generic name="当前PE：" extra_text='"11.99"'
+        if role == 'generic' and name:
+            for prefix in pe_pb_prefixes:
+                if name.startswith(prefix):
+                    # 值可能在 name 的冒号后面
+                    if '：' in name:
+                        val = name.split('：', 1)[-1].strip()
+                        if val:
+                            result[prefix] = val
+                            break
+                    # 值可能在 extra_text 中
+                    if extra:
+                        result[prefix] = extra
+                        break
+                    # 值可能在下一个相邻 generic 元素中
+                    if i + 1 < len(elements):
+                        next_elem = elements[i + 1]
+                        next_name = (next_elem.get('name', '') or '').strip()
+                        if next_name and next_elem.get('role') == 'generic':
+                            result[prefix] = next_name
+                    break
+
+        # 提取 PE/PB Bands 倍数线（如 "19.1x", "17.3x"）
+        if role == 'generic' and name and re.match(r'^-?\d+(\.\d+)?x$', name):
+            bands.append(name)
+
+        # 提取图例标签（如 "-1 SD", "+1 SD", "AVE", "PE"）
+        if role == 'generic' and name in ('-1 SD', '+1 SD', 'AVE', 'PE', 'PB', 'PS', 'PCF', '收盘价'):
+            if 'legend' not in result:
+                result['legend'] = []
+            if name not in result.get('legend', []):
+                result['legend'].append(name)
+
+    if bands:
+        result['bands'] = bands
+
+    return result
+
+
 def build_summary(elements: list[dict], page_url: str = '', truncated: bool = False) -> dict:
     """生成精简摘要 JSON（完整提取，不做内容过滤）"""
     try:
@@ -413,9 +389,12 @@ def build_summary(elements: list[dict], page_url: str = '', truncated: bool = Fa
                     if '/details/robo-news/' in url:
                         news_items.append({'title': name, 'url': url})
                     elif '/details/report/' in url:
-                        report_items.append({'title': name, 'url': url})
+                        # 过滤掉 title 为"图表"的附属链接
+                        if name and name.strip() != '图表':
+                            report_items.append({'title': name, 'url': url})
                     elif url.startswith('/search?query='):
-                        hot_keywords.append(name)
+                        if name and not re.match(r'^共有\d+条搜索结果$', name) and not re.match(r'^\d+\s', name):
+                            hot_keywords.append(name)
 
                 if role == 'generic' and name in (
                     '指标库', '个股分析', '行业分析', '资讯动态', '公告', '股票监控', '数据监控'
@@ -470,6 +449,9 @@ def build_summary(elements: list[dict], page_url: str = '', truncated: bool = Fa
             chart_data = extract_chart_data(elements)
             if chart_data:
                 summary['chart_data'] = chart_data
+            pe_pb = extract_pe_pb_data(elements)
+            if pe_pb and ('当前PE' in pe_pb or '当前PB' in pe_pb or 'bands' in pe_pb):
+                summary['pe_pb_data'] = pe_pb
             tables = extract_tables(elements)
             if tables:
                 summary['tables'] = tables
@@ -585,6 +567,9 @@ def clean_snapshot(raw: str, page_url: str = '', snapshot_id: str = '') -> tuple
             id_m = re.search(r'EXTERNAL_UNTRUSTED_CONTENT\s+id="([^"]+)"', raw)
             if id_m:
                 snapshot_id = id_m.group(1)
+
+        if not page_url:
+            page_url = infer_page_url(raw)
 
         truncated = detect_truncated(raw)
         elements = parse_snapshot(raw)

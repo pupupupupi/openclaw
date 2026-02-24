@@ -44,13 +44,30 @@ if ! command -v chromium >/dev/null 2>&1 && ! command -v chromium-browser >/dev/
   fi
 fi
 
-# Install dependencies for user-mounted plugins under ~/.openclaw/extensions/
+# Disable user-mounted plugins that are already bundled in the image to prevent
+# gateway from loading duplicates. We rename the directory so gateway's scan
+# of ~/.openclaw/extensions/ won't pick it up.
 EXTENSIONS_DIR="$HOME/.openclaw/extensions"
+if [ -d "$EXTENSIONS_DIR" ]; then
+  for plugin_dir in "$EXTENSIONS_DIR"/*/; do
+    [ -d "$plugin_dir" ] || continue
+    plugin_name="$(basename "$plugin_dir")"
+    # Skip already-disabled directories
+    case "$plugin_name" in *.disabled) continue ;; esac
+    if [ -d "/app/extensions/$plugin_name" ]; then
+      echo "[entrypoint] Disabling user-mounted plugin '$plugin_name' (already bundled in /app/extensions/)"
+      mv "$plugin_dir" "${plugin_dir%/}.disabled"
+    fi
+  done
+fi
+
+# Install dependencies for remaining user-mounted plugins under ~/.openclaw/extensions/
 if [ -d "$EXTENSIONS_DIR" ]; then
   for pkg in "$EXTENSIONS_DIR"/*/package.json; do
     [ -f "$pkg" ] || continue
     plugin_dir="$(dirname "$pkg")"
     plugin_name="$(basename "$plugin_dir")"
+
     echo "[entrypoint] Installing deps for plugin: $plugin_name"
 
     # Strip devDependencies with workspace:* protocol that pnpm can't resolve outside workspace
@@ -71,6 +88,9 @@ fi
 
 # Start Xvfb virtual display if available (needed for some Chromium operations in Docker)
 if command -v Xvfb >/dev/null 2>&1; then
+  # Clean stale X lock files from previous container runs to prevent
+  # "Server is already active for display 99" errors on restart.
+  rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
   if ! pgrep -x Xvfb >/dev/null 2>&1; then
     Xvfb :99 -screen 0 1280x720x24 -nolisten tcp &
     export DISPLAY=:99

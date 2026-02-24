@@ -9,6 +9,9 @@ if [ ! -f "$HOME/.local/bin/openclaw" ]; then
 fi
 export PATH="$HOME/.local/bin:$PATH"
 
+# Ensure akshare cache directory exists (mounted as named volume)
+mkdir -p "$HOME/.akshare_cache"
+
 # Install Python packages for skills (akshare etc.)
 if ! python3 -c "import akshare" 2>/dev/null; then
   echo "[entrypoint] Installing pip + akshare..."

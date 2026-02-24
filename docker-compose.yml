@@ -27,6 +27,8 @@ services:
       # - /var/run/docker.sock:/var/run/docker.sock
       # group_add:
       #   - "${DOCKER_GID:-999}"
+      - ${OPENCLAW_CONFIG_DIR}/python-packages:/home/node/.local
+      - ${OPENCLAW_CONFIG_DIR}/akshare-cache:/home/node/.akshare_cache
     ports:
       - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
       - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"

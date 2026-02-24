@@ -22,6 +22,8 @@ services:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
       - ./docker-entrypoint.sh:/app/docker-entrypoint.sh:ro
+      - ${OPENCLAW_CONFIG_DIR}/python-packages:/home/node/.local
+      - ${OPENCLAW_CONFIG_DIR}/akshare-cache:/home/node/.akshare_cache
     ports:
       - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
       - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"

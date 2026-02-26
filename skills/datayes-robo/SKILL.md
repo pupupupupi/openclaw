@@ -46,8 +46,7 @@ browser(action="act", request={ kind: "wait", timeMs: 3000 })
 browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
 ```
 
-**snapshot 返回文件路径，立即用清洗脚本处理**（参见下方 "Snapshot 数据清洗" 章节）。
-不要 cat 原文，直接传文件路径给 `clean_snapshot.py`。
+**snapshot 返回截断后的页面内容（可直接分析）+ 完整文件路径**，立即用清洗脚本处理（参见下方 "Snapshot 数据清洗" 章节）。
 
 判断标准（基于清洗后的 `summary.json` 中 `login_status` 字段）：
 - `logged_in` → 已登录，跳到 Step 4
@@ -104,7 +103,57 @@ browser(action="act", request={ kind: "wait", timeMs: 5000 })
 browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
 ```
 
-#### 搜索功能（仅用于关键词搜索，不用于查股票详情）
+#### 查询基金信息（重要）
+
+基金详情页 URL 格式为 `https://r.datayes.com/mof/app/fund/detail/{fundId}`，其中 `fundId`（如 `MUTUAL-10011892`）需要通过 API 查询获得，不能直接用基金代码拼 URL。
+
+**Step 1: 通过 Python 脚本查询基金 ID**
+
+必须先登录（Step 2/3 完成后），然后用脚本查询（脚本会自动从浏览器获取 cookie 调用 API）：
+
+```
+shell: python3 skills/datayes-robo/scripts/fund_search.py 006282
+```
+
+返回示例：
+```json
+{
+  "success": true,
+  "funds": [
+    { "symbol": "006282", "name": "摩根欧洲动力策略股票(QDII)-A", "id": "MUTUAL-10011892",
+      "detail_url": "https://r.datayes.com/mof/app/fund/detail/MUTUAL-10011892" }
+  ]
+}
+```
+
+也支持基金名称模糊搜索：
+```
+shell: python3 skills/datayes-robo/scripts/fund_search.py "摩根欧洲"
+```
+
+**Step 2: 导航到基金详情页**
+
+从返回的 `detail_url` 或 `id` 拼接 URL：
+
+```
+browser(action="navigate", targetUrl="https://r.datayes.com/mof/app/fund/detail/MUTUAL-10011892", profile="openclaw")
+browser(action="act", request={ kind: "wait", loadState: "domcontentloaded" })
+browser(action="act", request={ kind: "wait", timeMs: 5000 })
+browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
+```
+
+**注意事项：**
+- 脚本需要浏览器已登录（从浏览器 cookie 获取认证信息）
+- 返回的 `funds` 数组可能有多个结果（名称模糊匹配时），优先用代码精确匹配的那个
+- 禁止在首页搜索框中输入基金代码/名称进行搜索（效率低、容易超时）
+- 禁止用浏览器 evaluate 调用 API（跨域 cookie 不携带，会返回 403）
+
+**备选方案（脚本失败时）：** 导航到基金筛选页搜索：
+```
+browser(action="navigate", targetUrl="https://r.datayes.com/mof/app/fund/product/filter/public?keyword=006282", profile="openclaw")
+```
+
+#### 搜索功能（仅用于关键词搜索，不用于查股票/基金详情）
 
 搜索页 `/search?query=` 是搜索引擎，返回资讯/研报/公告等混合结果，**不适合查询个股详细信息**。
 仅在以下场景使用搜索：
@@ -137,21 +186,31 @@ browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
 
 ## Snapshot 数据清洗（每次 snapshot 后必须执行）
 
-snapshot tool 返回的不是原文，而是文件路径和元数据。原文已自动保存到唯一路径的文件中。
+snapshot tool 返回截断后的页面内容和完整文件路径。截断内容可直接在对话中分析，完整内容保存在文件中供清洗脚本使用。
 
-### snapshot tool 返回格式
+**snapshot 返回内容包含两部分：**
+1. 截断后的页面内容（accessibility tree），可直接在对话中分析
+2. 完整 snapshot 文件路径，用于 `clean_snapshot.py` 深度清洗
 
 ```
-Snapshot saved to: /tmp/snapshot_<uuid>/snapshot_raw.txt
-Page: https://r.datayes.com/stock/601390
-Characters: 15234
-Use clean_snapshot.py to process: python3 scripts/clean_snapshot.py /tmp/snapshot_<uuid>/snapshot_raw.txt --page-url "https://r.datayes.com/stock/601390"
+SECURITY NOTICE: ...
+<<<EXTERNAL_UNTRUSTED_CONTENT ...>>>
+Source: Browser
+---
+generic [active] [ref=e1]:
+  ...（截断后的页面内容）...
+<<<END_EXTERNAL_UNTRUSTED_CONTENT ...>>>
+Full snapshot saved to: /tmp/snapshot_<uuid>/snapshot_raw.txt (15234 chars)
+Note: content above is truncated to 30000 chars. Read the file for full content.
 ```
 
 ### 清洗流程
 
+snapshot 返回的内容已包含截断后的页面文本（可直接分析），同时完整内容保存在文件中。
+对于需要深度清洗的场景（提取结构化数据），使用文件路径调用清洗脚本：
+
 ```
-# 1. snapshot tool 已自动将原文保存到文件，直接使用返回的路径
+# 1. 从 snapshot 返回中提取文件路径（Full snapshot saved to: /tmp/snapshot_xxx/snapshot_raw.txt）
 # 2. 用 --summary-only 直接输出摘要到 stdout（推荐，避免 cat 大文件）
 shell: python3 skills/datayes-robo/scripts/clean_snapshot.py /tmp/snapshot_<uuid>/snapshot_raw.txt --summary-only --page-url "<当前页面URL>"
 
@@ -160,11 +219,9 @@ shell: python3 skills/datayes-robo/scripts/clean_snapshot.py /tmp/snapshot_<uuid
 ```
 
 重要：
-- 不要 cat snapshot 原文到对话中，直接传文件路径给清洗脚本
 - 优先用 `--summary-only`，不要写文件再 cat（减少对话上下文占用）
 - 只在需要点击操作时才用 `--elements-only` 获取 ref
 - 不需要手动生成 uuid，snapshot tool 已自动处理
-- 不要用 `--stdin` 方式传递 snapshot 原文（会占用对话上下文）
 
 ### 写文件模式（可选，需要反复查阅时使用）
 
@@ -213,7 +270,7 @@ browser(action="act", request={ kind: "click", ref: "e203" })
 
 ## snapshot 截断处理
 
-snapshot 默认不截断，返回完整页面内容。如需限制可通过环境变量 `OPENCLAW_SNAPSHOT_MAX_CHARS` 设置正整数启用截断。
+snapshot 内容会被截断后返回到对话中（由 `OPENCLAW_SNAPSHOT_MAX_CHARS` 控制，默认 12000 字符），完整内容自动保存到文件。截断不影响清洗脚本，因为清洗脚本读取的是完整文件。
 
 注意：聊天历史有 12K 字符限制（`CHAT_HISTORY_TEXT_MAX_CHARS`），snapshot 原文在后续对话轮次中会被截断。因此每次 snapshot 后必须立即执行数据清洗，用清洗后的精简 summary 做后续对话。
 
@@ -256,6 +313,7 @@ snapshot 默认不截断，返回完整页面内容。如需限制可通过环�
 | 登录 | `https://r.datayes.com/auth/login` |
 | 搜索 | `https://r.datayes.com/search?query={关键词}` |
 | 个股 | `https://r.datayes.com/stock/{code}` |
+| 基金详情 | `https://r.datayes.com/mof/app/fund/detail/{fundId}` |
 | 研报 | `https://r.datayes.com/fastreport` |
 | 资讯 | `https://r.datayes.com/intelligent_feed` |
 | 数据 | `https://r.datayes.com/data/economy_database` |

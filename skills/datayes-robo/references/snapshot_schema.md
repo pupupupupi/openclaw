@@ -230,13 +230,18 @@
 
 ### snapshot tool 返回格式
 
-snapshot tool 不再返回原文到对话上下文，而是返回文件路径：
+snapshot tool 返回截断后的页面内容（accessibility tree）+ 完整文件路径：
 
 ```
-Snapshot saved to: /tmp/snapshot_a1b2c3d4e5f6/snapshot_raw.txt
-Page: https://r.datayes.com
-Characters: 15234
-Use clean_snapshot.py to process: python3 scripts/clean_snapshot.py /tmp/snapshot_a1b2c3d4e5f6/snapshot_raw.txt --page-url "https://r.datayes.com"
+SECURITY NOTICE: ...
+<<<EXTERNAL_UNTRUSTED_CONTENT ...>>>
+Source: Browser
+---
+generic [active] [ref=e1]:
+  ...（截断后的页面内容）...
+<<<END_EXTERNAL_UNTRUSTED_CONTENT ...>>>
+Full snapshot saved to: /tmp/snapshot_<uuid>/snapshot_raw.txt (15234 chars)
+Note: content above is truncated to 12000 chars. Read the file for full content.
 ```
 
 ### 命令行（推荐 --summary-only）
@@ -253,7 +258,6 @@ python3 scripts/clean_snapshot.py /tmp/snapshot_<uuid>/snapshot_raw.txt --page-u
 ```
 
 不指定 `-o` 时自动生成唯一输出目录 `/tmp/datayes_cleaned_<uuid>/`。
-不要用 `--stdin` 或 heredoc 传递 snapshot 原文，直接传文件路径。
 
 ### 作为模块导入
 

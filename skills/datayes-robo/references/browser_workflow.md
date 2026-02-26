@@ -22,8 +22,8 @@ browser(action="navigate", targetUrl="https://r.datayes.com", profile="openclaw"
 browser(action="act", profile="openclaw", request={kind: "wait", loadState: "domcontentloaded"})
 browser(action="act", profile="openclaw", request={kind: "wait", timeMs: 3000})
 browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
-# → snapshot 返回文件路径（不返回原文），如: /tmp/snapshot_<uuid>/snapshot_raw.txt
-# → 用返回的路径执行数据清洗: python3 scripts/clean_snapshot.py <路径> --page-url "..."
+# → snapshot 返回截断后的页面内容 + 完整文件路径（如: /tmp/snapshot_<uuid>/snapshot_raw.txt）
+# → 用返回的文件路径执行数据清洗: python3 scripts/clean_snapshot.py <路径> --page-url "..."
 # → 检查清洗后 summary.json 的 login_status
 # → 如果能看到导航栏+资讯列表等完整内容 → 已登录，跳过登录
 # → 如果看到登录表单（tab "密码登录"、button "登 录"）→ 未登录
@@ -37,7 +37,7 @@ browser(action="act", profile="openclaw", request={kind: "wait", timeMs: 2000})
 
 # 5. 获取 AI 快照定位表单元素
 browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
-# → snapshot 返回文件路径，用清洗脚本处理后从 elements.json 中找到：
+# → snapshot 返回截断后的页面内容 + 文件路径，用清洗脚本处理后从 elements.json 中找到：
 #   - tab "密码登录" ref
 #   - textbox "手机号码/邮箱/账号" ref
 #   - 密码输入框 ref
@@ -82,7 +82,7 @@ browser(action="act", profile="openclaw", request={kind: "wait", timeMs: 5000})
 
 # 4. 获取快照提取数据（使用默认模式，不用 efficient）
 browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
-# → snapshot 返回文件路径，用清洗脚本处理
+# → snapshot 返回截断后的页面内容 + 文件路径，用清洗脚本处理
 
 # 5. 如果 snapshot 只拿到左侧菜单，点击具体子模块查看数据
 browser(action="act", profile="openclaw", request={kind: "click", ref: "<关键数据概览link的ref>"})
@@ -93,6 +93,27 @@ browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
 browser(action="act", profile="openclaw", request={kind: "click", ref: "<财务tab_ref>"})
 browser(action="act", profile="openclaw", request={kind: "wait", timeMs: 3000})
 browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
+```
+
+## 基金查询工作流
+
+```
+# 1. 确保已登录（脚本需要浏览器的登录 cookie）
+
+# 2. 通过 Python 脚本查询基金 ID（自动从浏览器获取 cookie 调 API）
+shell: python3 skills/datayes-robo/scripts/fund_search.py 006282
+# → 返回 JSON，从 funds[0].id 提取 fundId（如 MUTUAL-10011892）
+# → 或直接用 funds[0].detail_url
+
+# 3. 导航到基金详情页
+browser(action="navigate", targetUrl="https://r.datayes.com/mof/app/fund/detail/MUTUAL-10011892", profile="openclaw")
+browser(action="act", profile="openclaw", request={kind: "wait", loadState: "domcontentloaded"})
+browser(action="act", profile="openclaw", request={kind: "wait", timeMs: 5000})
+browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
+# → 用返回的文件路径执行数据清洗
+
+# 备选（脚本失败时）：导航到基金筛选页
+browser(action="navigate", targetUrl="https://r.datayes.com/mof/app/fund/product/filter/public?keyword=006282", profile="openclaw")
 ```
 
 ## act request kind 速查
@@ -107,7 +128,7 @@ browser(action="snapshot", snapshotFormat="ai", profile="openclaw")
 | `select` | 下拉选择 | `ref`, `values` |
 | `fill` | 批量填表 | `fields` |
 | `wait` | 等待条件 | `text`/`loadState`/`timeMs` 等 |
-| `evaluate` | 执行 JS | `fn` |
+| `evaluate` | 执行 JS | `fn`（箭头函数字符串，如 `"() => document.title"`) |
 | `close` | 关闭标签页 | — |
 
 ## snapshot 参数选择

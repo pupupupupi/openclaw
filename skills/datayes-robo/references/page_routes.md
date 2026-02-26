@@ -7,6 +7,7 @@
 | 首页 | `https://r.datayes.com` | 市场概览、热门资讯 |
 | 登录 | `https://r.datayes.com/auth/login` | 手机号+密码登录 |
 | 个股详情 | `https://r.datayes.com/stock/{code}` | 个股全景分析 |
+| 基金详情 | `https://r.datayes.com/mof/app/fund/detail/{fundId}` | 基金详情页（fundId 如 `MUTUAL-10011892`，需 API 查询） |
 | 研报中心 | `https://r.datayes.com/fastreport` | 券商研报列表 |
 | 资讯 | `https://r.datayes.com/intelligent_feed` | 资讯动态 |
 | 数据 | `https://r.datayes.com/data/economy_database` | 宏观经济数据库 |

@@ -528,18 +528,37 @@ export function createBrowserTool(opts?: {
               });
           if (snapshot.format === "ai") {
             const extractedText = snapshot.snapshot ?? "";
+            // Save full snapshot to file for downstream processing (e.g. clean_snapshot.py)
             const snapshotId = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
             const snapshotDir = path.join(os.tmpdir(), `snapshot_${snapshotId}`);
             await fs.mkdir(snapshotDir, { recursive: true });
             const snapshotFile = path.join(snapshotDir, "snapshot_raw.txt");
             await fs.writeFile(snapshotFile, extractedText, "utf-8");
 
+            // Return truncated content inline + file path for full content
+            const contentMaxChars =
+              DEFAULT_AI_SNAPSHOT_MAX_CHARS > 0 ? DEFAULT_AI_SNAPSHOT_MAX_CHARS : 30_000;
+            const contentTruncated = extractedText.length > contentMaxChars;
+            const inlineContent = contentTruncated
+              ? extractedText.slice(0, contentMaxChars)
+              : extractedText;
+
+            const wrappedSnapshot = wrapExternalContent(inlineContent, {
+              source: "browser",
+              includeWarning: true,
+            });
+
+            const fileLine = `\nFull snapshot saved to: ${snapshotFile} (${extractedText.length} chars)`;
+            const truncLine = contentTruncated
+              ? `\nNote: content above is truncated to ${contentMaxChars} chars. Read the file for full content.`
+              : "";
+
             const safeDetails = {
               ok: true,
               format: snapshot.format,
               targetId: snapshot.targetId,
               url: snapshot.url,
-              truncated: snapshot.truncated,
+              truncated: snapshot.truncated || contentTruncated,
               stats: snapshot.stats,
               refs: snapshot.refs ? Object.keys(snapshot.refs).length : undefined,
               labels: snapshot.labels,
@@ -558,33 +577,17 @@ export function createBrowserTool(opts?: {
               },
             };
             if (labels && snapshot.imagePath) {
-              const summaryText = [
-                `Snapshot saved to: ${snapshotFile}`,
-                `Page: ${snapshot.url ?? ""}`,
-                `Characters: ${extractedText.length}`,
-                snapshot.truncated ? "WARNING: snapshot was truncated" : "",
-                `Use clean_snapshot.py to process: python3 scripts/clean_snapshot.py ${snapshotFile} --page-url "${snapshot.url ?? ""}"`,
-              ]
-                .filter(Boolean)
-                .join("\n");
               return await imageResultFromFile({
                 label: "browser:snapshot",
                 path: snapshot.imagePath,
-                extraText: summaryText,
+                extraText: wrappedSnapshot + fileLine + truncLine,
                 details: safeDetails,
               });
             }
-            const summaryText = [
-              `Snapshot saved to: ${snapshotFile}`,
-              `Page: ${snapshot.url ?? ""}`,
-              `Characters: ${extractedText.length}`,
-              snapshot.truncated ? "WARNING: snapshot was truncated" : "",
-              `Use clean_snapshot.py to process: python3 scripts/clean_snapshot.py ${snapshotFile} --page-url "${snapshot.url ?? ""}"`,
-            ]
-              .filter(Boolean)
-              .join("\n");
             return {
-              content: [{ type: "text" as const, text: summaryText }],
+              content: [
+                { type: "text" as const, text: wrappedSnapshot + fileLine + truncLine },
+              ],
               details: safeDetails,
             };
           }

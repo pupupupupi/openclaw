@@ -92,9 +92,21 @@ if command -v Xvfb >/dev/null 2>&1; then
   # "Server is already active for display 99" errors on restart.
   rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
   if ! pgrep -x Xvfb >/dev/null 2>&1; then
-    Xvfb :99 -screen 0 1280x720x24 -nolisten tcp &
+    Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
     export DISPLAY=:99
     echo "[entrypoint] Xvfb started on :99"
+  fi
+fi
+
+# Start x11vnc for remote browser viewing (install at runtime if not present)
+if [ "${OPENCLAW_ENABLE_VNC:-0}" = "1" ]; then
+  if command -v x11vnc >/dev/null 2>&1 && ! pgrep -x x11vnc >/dev/null 2>&1; then
+    VNC_PORT="${OPENCLAW_VNC_PORT:-5902}"
+    VNC_PASSWORD="${OPENCLAW_VNC_PASSWORD:-openclaw}"
+    x11vnc -display :99 -passwd "$VNC_PASSWORD" -listen 0.0.0.0 -rfbport "$VNC_PORT" -shared -forever -bg 2>/dev/null
+    echo "[entrypoint] x11vnc started on port $VNC_PORT (password protected)"
+  elif [ ! -x "$(command -v x11vnc 2>/dev/null)" ]; then
+    echo "[entrypoint] Warning: OPENCLAW_ENABLE_VNC=1 but x11vnc not installed. Rebuild with OPENCLAW_INSTALL_BROWSER=1"
   fi
 fi
 

@@ -60,6 +60,7 @@ RUN if [ -n "$OPENCLAW_INSTALL_BROWSER" ]; then \
       DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         xvfb \
         chromium \
+        x11vnc \
       && apt-get clean && \
       rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*; \
     fi

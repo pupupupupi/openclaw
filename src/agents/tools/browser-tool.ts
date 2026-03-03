@@ -7,7 +7,6 @@ import {
   browserAct,
   browserArmDialog,
   browserArmFileChooser,
-  browserConsoleMessages,
   browserNavigate,
   browserPdfSave,
   browserScreenshotAction,
@@ -17,18 +16,20 @@ import {
   browserFocusTab,
   browserOpenTab,
   browserProfiles,
-  browserSnapshot,
   browserStart,
   browserStatus,
   browserStop,
-  browserTabs,
 } from "../../browser/client.js";
 import { resolveBrowserConfig } from "../../browser/config.js";
-import { DEFAULT_AI_SNAPSHOT_MAX_CHARS } from "../../browser/constants.js";
 import { DEFAULT_UPLOAD_DIR, resolveExistingPathsWithinRoot } from "../../browser/paths.js";
 import { applyBrowserProxyPaths, persistBrowserProxyFiles } from "../../browser/proxy-files.js";
 import { loadConfig } from "../../config/config.js";
-import { wrapExternalContent } from "../../security/external-content.js";
+import {
+  executeActAction,
+  executeConsoleAction,
+  executeSnapshotAction,
+  executeTabsAction,
+} from "./browser-tool.actions.js";
 import { BrowserToolSchema } from "./browser-tool.schema.js";
 import { type AnyAgentTool, imageResultFromFile, jsonResult, readStringParam } from "./common.js";
 import { callGatewayTool } from "./gateway.js";
@@ -38,45 +39,6 @@ import {
   selectDefaultNodeFromList,
   type NodeListNode,
 } from "./nodes-utils.js";
-
-function wrapBrowserExternalJson(params: {
-  kind: "snapshot" | "console" | "tabs";
-  payload: unknown;
-  includeWarning?: boolean;
-}): { wrappedText: string; safeDetails: Record<string, unknown> } {
-  const extractedText = JSON.stringify(params.payload, null, 2);
-  const wrappedText = wrapExternalContent(extractedText, {
-    source: "browser",
-    includeWarning: params.includeWarning ?? true,
-  });
-  return {
-    wrappedText,
-    safeDetails: {
-      ok: true,
-      externalContent: {
-        untrusted: true,
-        source: "browser",
-        kind: params.kind,
-        wrapped: true,
-      },
-    },
-  };
-}
-
-function formatTabsToolResult(tabs: unknown[]): AgentToolResult<unknown> {
-  const wrapped = wrapBrowserExternalJson({
-    kind: "tabs",
-    payload: { tabs },
-    includeWarning: false,
-  });
-  const content: AgentToolResult<unknown>["content"] = [
-    { type: "text", text: wrapped.wrappedText },
-  ];
-  return {
-    content,
-    details: { ...wrapped.safeDetails, tabCount: tabs.length },
-  };
-}
 
 function readOptionalTargetAndTimeout(params: Record<string, unknown>) {
   const targetId = typeof params.targetId === "string" ? params.targetId.trim() : undefined;
@@ -92,6 +54,53 @@ function readTargetUrlParam(params: Record<string, unknown>) {
     readStringParam(params, "targetUrl") ??
     readStringParam(params, "url", { required: true, label: "targetUrl" })
   );
+}
+
+const LEGACY_BROWSER_ACT_REQUEST_KEYS = [
+  "targetId",
+  "ref",
+  "doubleClick",
+  "button",
+  "modifiers",
+  "text",
+  "submit",
+  "slowly",
+  "key",
+  "delayMs",
+  "startRef",
+  "endRef",
+  "values",
+  "fields",
+  "width",
+  "height",
+  "timeMs",
+  "textGone",
+  "selector",
+  "url",
+  "loadState",
+  "fn",
+  "timeoutMs",
+] as const;
+
+function readActRequestParam(params: Record<string, unknown>) {
+  const requestParam = params.request;
+  if (requestParam && typeof requestParam === "object") {
+    return requestParam as Parameters<typeof browserAct>[1];
+  }
+
+  const kind = readStringParam(params, "kind");
+  if (!kind) {
+    return undefined;
+  }
+
+  const request: Record<string, unknown> = { kind };
+  for (const key of LEGACY_BROWSER_ACT_REQUEST_KEYS) {
+    if (!Object.hasOwn(params, key)) {
+      continue;
+    }
+    request[key] = params[key];
+  }
+  return request as Parameters<typeof browserAct>[1];
 }
 
 type BrowserProxyFile = {
@@ -401,19 +410,7 @@ export function createBrowserTool(opts?: {
           }
           return jsonResult({ profiles: await browserProfiles(baseUrl) });
         case "tabs":
-          if (proxyRequest) {
-            const result = await proxyRequest({
-              method: "GET",
-              path: "/tabs",
-              profile,
-            });
-            const tabs = (result as { tabs?: unknown[] }).tabs ?? [];
-            return formatTabsToolResult(tabs);
-          }
-          {
-            const tabs = await browserTabs(baseUrl, { profile });
-            return formatTabsToolResult(tabs);
-          }
+          return await executeTabsAction({ baseUrl, profile, proxyRequest });
         case "open": {
           const targetUrl = readTargetUrlParam(params);
           if (proxyRequest) {
@@ -690,50 +687,13 @@ export function createBrowserTool(opts?: {
             }),
           );
         }
-        case "console": {
-          const level = typeof params.level === "string" ? params.level.trim() : undefined;
-          const targetId = typeof params.targetId === "string" ? params.targetId.trim() : undefined;
-          if (proxyRequest) {
-            const result = (await proxyRequest({
-              method: "GET",
-              path: "/console",
-              profile,
-              query: {
-                level,
-                targetId,
-              },
-            })) as { ok?: boolean; targetId?: string; messages?: unknown[] };
-            const wrapped = wrapBrowserExternalJson({
-              kind: "console",
-              payload: result,
-              includeWarning: false,
-            });
-            return {
-              content: [{ type: "text" as const, text: wrapped.wrappedText }],
-              details: {
-                ...wrapped.safeDetails,
-                targetId: typeof result.targetId === "string" ? result.targetId : undefined,
-                messageCount: Array.isArray(result.messages) ? result.messages.length : undefined,
-              },
-            };
-          }
-          {
-            const result = await browserConsoleMessages(baseUrl, { level, targetId, profile });
-            const wrapped = wrapBrowserExternalJson({
-              kind: "console",
-              payload: result,
-              includeWarning: false,
-            });
-            return {
-              content: [{ type: "text" as const, text: wrapped.wrappedText }],
-              details: {
-                ...wrapped.safeDetails,
-                targetId: result.targetId,
-                messageCount: result.messages.length,
-              },
-            };
-          }
-        }
+        case "console":
+          return await executeConsoleAction({
+            input: params,
+            baseUrl,
+            profile,
+            proxyRequest,
+          });
         case "pdf": {
           const targetId = typeof params.targetId === "string" ? params.targetId.trim() : undefined;
           const result = proxyRequest
@@ -824,47 +784,16 @@ export function createBrowserTool(opts?: {
           );
         }
         case "act": {
-          const request = params.request as Record<string, unknown> | undefined;
-          if (!request || typeof request !== "object") {
+          const request = readActRequestParam(params);
+          if (!request) {
             throw new Error("request required");
           }
-          try {
-            const result = proxyRequest
-              ? await proxyRequest({
-                  method: "POST",
-                  path: "/act",
-                  profile,
-                  body: request,
-                })
-              : await browserAct(baseUrl, request as Parameters<typeof browserAct>[1], {
-                  profile,
-                });
-            return jsonResult(result);
-          } catch (err) {
-            const msg = String(err);
-            if (msg.includes("404:") && msg.includes("tab not found") && profile === "chrome") {
-              const tabs = proxyRequest
-                ? ((
-                    (await proxyRequest({
-                      method: "GET",
-                      path: "/tabs",
-                      profile,
-                    })) as { tabs?: unknown[] }
-                  ).tabs ?? [])
-                : await browserTabs(baseUrl, { profile }).catch(() => []);
-              if (!tabs.length) {
-                throw new Error(
-                  "No Chrome tabs are attached via the OpenClaw Browser Relay extension. Click the toolbar icon on the tab you want to control (badge ON), then retry.",
-                  { cause: err },
-                );
-              }
-              throw new Error(
-                `Chrome tab not found (stale targetId?). Run action=tabs profile="chrome" and use one of the returned targetIds.`,
-                { cause: err },
-              );
-            }
-            throw err;
-          }
+          return await executeActAction({
+            request,
+            baseUrl,
+            profile,
+            proxyRequest,
+          });
         }
         default:
           throw new Error(`Unknown action: ${action}`);

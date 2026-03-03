@@ -29,7 +29,11 @@ import {
   executeConsoleAction,
   executeSnapshotAction,
   executeTabsAction,
+  wrapBrowserExternalJson,
 } from "./browser-tool.actions.js";
+import { DEFAULT_AI_SNAPSHOT_MAX_CHARS } from "../../browser/constants.js";
+import { browserSnapshot } from "../../browser/client.js";
+import { wrapExternalContent } from "../../security/external-content.js";
 import { BrowserToolSchema } from "./browser-tool.schema.js";
 import { type AnyAgentTool, imageResultFromFile, jsonResult, readStringParam } from "./common.js";
 import { callGatewayTool } from "./gateway.js";

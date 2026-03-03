@@ -15,7 +15,7 @@ type BrowserProxyRequest = (opts: {
   profile?: string;
 }) => Promise<unknown>;
 
-function wrapBrowserExternalJson(params: {
+export function wrapBrowserExternalJson(params: {
   kind: "snapshot" | "console" | "tabs";
   payload: unknown;
   includeWarning?: boolean;

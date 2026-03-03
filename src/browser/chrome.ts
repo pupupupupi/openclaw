@@ -350,14 +350,15 @@ export async function launchOpenClawChrome(
   const proc = spawnOnce();
   // Capture stderr for diagnostics if Chrome fails to start.
   let stderrChunks: string[] = [];
-  proc.stderr.on("data", (chunk: Buffer) => {
+  const onStderr = (chunk: Buffer) => {
     const text = chunk.toString("utf8");
     stderrChunks.push(text);
     // Keep only last ~4KB to avoid unbounded memory growth.
     if (stderrChunks.length > 40) {
       stderrChunks = stderrChunks.slice(-20);
     }
-  });
+  };
+  proc.stderr.on("data", onStderr);
 
   // Wait for CDP to come up.
   const readyDeadline = Date.now() + CHROME_LAUNCH_READY_WINDOW_MS;

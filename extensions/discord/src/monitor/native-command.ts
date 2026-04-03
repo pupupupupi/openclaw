@@ -16,7 +16,11 @@ import { createChannelReplyPipeline } from "openclaw/plugin-sdk/channel-reply-pi
 import {
   resolveCommandAuthorizedFromAuthorizers,
   resolveNativeCommandSessionTargets,
-} from "openclaw/plugin-sdk/command-auth";
+} from "openclaw/plugin-sdk/command-auth-native";
+import type { OpenClawConfig, loadConfig } from "openclaw/plugin-sdk/config-runtime";
+import { buildPairingReply } from "openclaw/plugin-sdk/conversation-runtime";
+import { isDangerousNameMatchingEnabled } from "openclaw/plugin-sdk/dangerous-name-runtime";
+import { getAgentScopedMediaLocalRoots } from "openclaw/plugin-sdk/media-runtime";
 import {
   buildCommandTextFromArgs,
   findCommandByNativeName,
@@ -30,12 +34,7 @@ import {
   type CommandArgValues,
   type CommandArgs,
   type NativeCommandSpec,
-} from "openclaw/plugin-sdk/command-auth";
-import type { OpenClawConfig, loadConfig } from "openclaw/plugin-sdk/config-runtime";
-import { isDangerousNameMatchingEnabled } from "openclaw/plugin-sdk/config-runtime";
-import { resolveOpenProviderRuntimeGroupPolicy } from "openclaw/plugin-sdk/config-runtime";
-import { buildPairingReply } from "openclaw/plugin-sdk/conversation-runtime";
-import { getAgentScopedMediaLocalRoots } from "openclaw/plugin-sdk/media-runtime";
+} from "openclaw/plugin-sdk/native-command-registry";
 import * as pluginRuntime from "openclaw/plugin-sdk/plugin-runtime";
 import {
   resolveSendableOutboundReplyParts,
@@ -46,6 +45,7 @@ import { resolveChunkMode, resolveTextChunkLimit } from "openclaw/plugin-sdk/rep
 import type { ReplyPayload } from "openclaw/plugin-sdk/reply-runtime";
 import { logVerbose } from "openclaw/plugin-sdk/runtime-env";
 import { createSubsystemLogger } from "openclaw/plugin-sdk/runtime-env";
+import { resolveOpenProviderRuntimeGroupPolicy } from "openclaw/plugin-sdk/runtime-group-policy";
 import { loadWebMedia } from "openclaw/plugin-sdk/web-media";
 import { resolveDiscordMaxLinesPerMessage } from "../accounts.js";
 import { chunkDiscordTextWithMode } from "../chunk.js";
@@ -53,6 +53,7 @@ import {
   isDiscordGroupAllowedByPolicy,
   normalizeDiscordAllowList,
   normalizeDiscordSlug,
+  resolveGroupDmAllow,
   resolveDiscordChannelConfigWithFallback,
   resolveDiscordAllowListMatch,
   resolveDiscordGuildEntry,
@@ -283,6 +284,33 @@ function shouldBypassConfiguredAcpEnsure(commandName: string): boolean {
   return normalized === "acp" || normalized === "new" || normalized === "reset";
 }
 
+function resolveDiscordNativeGroupDmAccess(params: {
+  isGroupDm: boolean;
+  groupEnabled?: boolean;
+  groupChannels?: string[];
+  channelId: string;
+  channelName?: string;
+  channelSlug: string;
+}): { allowed: true } | { allowed: false; reason: "disabled" | "not-allowlisted" } {
+  if (!params.isGroupDm) {
+    return { allowed: true };
+  }
+  if (params.groupEnabled === false) {
+    return { allowed: false, reason: "disabled" };
+  }
+  if (
+    !resolveGroupDmAllow({
+      channels: params.groupChannels,
+      channelId: params.channelId,
+      channelName: params.channelName,
+      channelSlug: params.channelSlug,
+    })
+  ) {
+    return { allowed: false, reason: "not-allowlisted" };
+  }
+  return { allowed: true };
+}
+
 async function resolveDiscordNativeAutocompleteAuthorized(params: {
   interaction: AutocompleteInteraction;
   cfg: ReturnType<typeof loadConfig>;
@@ -421,7 +449,15 @@ async function resolveDiscordNativeAutocompleteAuthorized(params: {
       return false;
     }
   }
-  if (isGroupDm && discordConfig?.dm?.groupEnabled === false) {
+  const groupDmAccess = resolveDiscordNativeGroupDmAccess({
+    isGroupDm,
+    groupEnabled: discordConfig?.dm?.groupEnabled,
+    groupChannels: discordConfig?.dm?.groupChannels,
+    channelId: rawChannelId,
+    channelName,
+    channelSlug,
+  });
+  if (!groupDmAccess.allowed) {
     return false;
   }
   if (!isDirectMessage) {
@@ -832,6 +868,22 @@ async function dispatchDiscordCommandInteraction(params: {
       return;
     }
   }
+  const groupDmAccess = resolveDiscordNativeGroupDmAccess({
+    isGroupDm,
+    groupEnabled: discordConfig?.dm?.groupEnabled,
+    groupChannels: discordConfig?.dm?.groupChannels,
+    channelId: rawChannelId,
+    channelName,
+    channelSlug,
+  });
+  if (!groupDmAccess.allowed) {
+    await respond(
+      groupDmAccess.reason === "disabled"
+        ? "Discord group DMs are disabled."
+        : "This group DM is not allowed.",
+    );
+    return;
+  }
   if (!isDirectMessage) {
     const { hasAccessRestrictions, memberAllowed } = resolveDiscordMemberAccessState({
       channelConfig,
@@ -865,10 +917,6 @@ async function dispatchDiscordCommandInteraction(params: {
       await respond("You are not authorized to use this command.", { ephemeral: true });
       return;
     }
-  }
-  if (isGroupDm && discordConfig?.dm?.groupEnabled === false) {
-    await respond("Discord group DMs are disabled.");
-    return;
   }
 
   const menu = resolveCommandArgMenu({

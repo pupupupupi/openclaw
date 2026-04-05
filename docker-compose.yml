@@ -14,11 +14,16 @@ services:
       CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY:-}
       CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY:-}
       CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE:-}
-      TZ: ${OPENCLAW_TZ:-UTC}
+      TZ: ${OPENCLAW_TZ:-Asia/Shanghai}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
       - ./docker-entrypoint.sh:/app/docker-entrypoint.sh:ro
+      ## Mount host skill directories so container can resolve Mac-absolute paths
+      ## used by external clients (e.g. opencode) that reference host-side skills.
+      - ${HOME:-.}/.agents/skills:/Users/linht/.agents/skills:ro
+      - ${HOME:-.}/.claude/skills:/Users/linht/.claude/skills:ro
+      - ${HOME:-.}/test/openclaw_workspace:/Users/linht/test/openclaw_workspace
       ## Uncomment the lines below to enable sandbox isolation
       ## (agents.defaults.sandbox). Requires Docker CLI in the image
       ## (build with --build-arg OPENCLAW_INSTALL_DOCKER_CLI=1) or use

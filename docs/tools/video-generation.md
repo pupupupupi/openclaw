@@ -218,67 +218,6 @@ entries.
 | Vydra    | Uses `https://www.vydra.ai/api/v1` directly to avoid auth-dropping redirects. `veo3` is bundled as text-to-video only; `kling` requires a remote image URL. |
 | xAI      | Supports text-to-video, image-to-video, and remote video edit/extend flows.                                                                                 |
 
-## Provider capability modes
-
-The shared video-generation contract now lets providers declare mode-specific
-capabilities instead of only flat aggregate limits. New provider
-implementations should prefer explicit mode blocks:
-
-```typescript
-capabilities: {
-  generate: {
-    maxVideos: 1,
-    maxDurationSeconds: 10,
-    supportsResolution: true,
-  },
-  imageToVideo: {
-    enabled: true,
-    maxVideos: 1,
-    maxInputImages: 1,
-    maxDurationSeconds: 5,
-  },
-  videoToVideo: {
-    enabled: true,
-    maxVideos: 1,
-    maxInputVideos: 1,
-    maxDurationSeconds: 5,
-  },
-}
-```
-
-Flat aggregate fields such as `maxInputImages` and `maxInputVideos` are not
-enough to advertise transform-mode support. Providers should declare
-`generate`, `imageToVideo`, and `videoToVideo` explicitly so live tests,
-contract tests, and the shared `video_generate` tool can validate mode support
-deterministically.
-
-## Live tests
-
-Opt-in live coverage for the shared bundled providers:
-
-```bash
-OPENCLAW_LIVE_TEST=1 pnpm test:live -- extensions/video-generation-providers.live.test.ts
-```
-
-Repo wrapper:
-
-```bash
-pnpm test:live:media video
-```
-
-This live file loads missing provider env vars from `~/.profile`, prefers
-live/env API keys ahead of stored auth profiles by default, and runs the
-declared modes it can exercise safely with local media:
-
-- `generate` for every provider in the sweep
-- `imageToVideo` when `capabilities.imageToVideo.enabled`
-- `videoToVideo` when `capabilities.videoToVideo.enabled` and the provider/model
-  accepts buffer-backed local video input in the shared sweep
-
-Today the shared `videoToVideo` live lane covers:
-
-- `runway` only when you select `runway/gen4_aleph`
-
 ## Configuration
 
 Set the default video generation model in your OpenClaw config:

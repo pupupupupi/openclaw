@@ -68,9 +68,9 @@ fi
 # Start Xvfb virtual display if available (needed for some Chromium operations in Docker)
 if command -v Xvfb >/dev/null 2>&1; then
   if ! pgrep -x Xvfb >/dev/null 2>&1; then
-    Xvfb :100 -screen 0 1280x720x24 -nolisten tcp &
-    export DISPLAY=:100
-    echo "[entrypoint] Xvfb started on :100"
+    Xvfb :101 -screen 0 1280x720x24 -nolisten tcp &
+    export DISPLAY=:101
+    echo "[entrypoint] Xvfb started on :101"
   fi
 fi
 
